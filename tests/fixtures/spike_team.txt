@@ -1,0 +1,59 @@
+Venusaur @ Leftovers
+Ability: Overgrow
+Level: 50
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Acid Spray
+- Amnesia
+- Body Slam
+- Bulldoze
+
+Charizard @ Life Orb
+Ability: Blaze
+Level: 50
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Acrobatics
+- Aerial Ace
+- Air Cutter
+- Air Slash
+
+Blastoise @ Choice Scarf
+Ability: Torrent
+Level: 50
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Aqua Jet
+- Aqua Ring
+- Aqua Tail
+- Aura Sphere
+
+Beedrill @ Focus Sash
+Ability: Swarm
+Level: 50
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Acrobatics
+- Aerial Ace
+- Agility
+- Air Cutter
+
+Pidgeot @ Expert Belt
+Ability: Keen Eye
+Level: 50
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Aerial Ace
+- Agility
+- Air Slash
+- Attract
+
+Arbok @ Muscle Band
+Ability: Intimidate
+Level: 50
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Acid Spray
+- Beat Up
+- Belch
+- Bite

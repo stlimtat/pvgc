@@ -24,9 +24,11 @@ GAUNTLET_SIZE = 16
 HOLDOUT_SIZE = 4  # the proposer never sees these; overfitting shows as a gap
 BATTLES_PER_MATCHUP = 50
 
-# Reg M-B rules
+# Reg M-B rules, verified against Showdown's resolved rule table (see
+# docs/superpowers/SPIKE-M0.md). Champions uses Stat Points, NOT mainline EVs:
+# 66 total and 32 per stat, against mainline's 508/252.
 TEAM_SIZE = 6
 BRING_SIZE = 4
-LEVEL = 50
-MAX_EVS_TOTAL = 508
-MAX_EVS_PER_STAT = 252
+LEVEL = 50  # rule table adjustLevel: 50
+MAX_STAT_POINTS_TOTAL = 66
+MAX_STAT_POINTS_PER_STAT = 32
