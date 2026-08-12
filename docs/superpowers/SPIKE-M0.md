@@ -94,6 +94,30 @@ Impact: the bring-4 policy depends on seeing the opponent's full team at
 preview. `sim.py` must pass `accept_open_team_sheet=True`, or the policy will
 select against partial information and every result will be subtly wrong.
 
+## Finding 5: no GenData patch needed (plan Task 4 dropped)
+
+The plan predicted poke-env would be missing Champions species, since
+`GenData.from_format` does `int(format[3])` and so loads stock gen-9 data.
+The first half is true; the conclusion was not.
+
+Measured against poke-env 0.15.0:
+
+```
+poke-env gen: 9  pokedex size: 1599  moves: 954
+champions species missing from poke-env: 0
+champions moves missing from poke-env: 0
+missing MEGAS: 0
+species with MISMATCHED baseStats: 0
+species with MISMATCHED types: 0
+```
+
+poke-env 0.15.0 bundles data generated from a Showdown master recent enough to
+carry the Champions species, all 76 Megas, and their rebalanced stats. Task 4
+(`patch_gen_data`) is deleted rather than written.
+
+`pvgc/dex.py` is still required — it is the source of *legality* (which species,
+moves, and items are standard in Reg M-B), which poke-env's dex does not encode.
+
 ## Species pool
 
 - 1517 total species in the mod
