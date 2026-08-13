@@ -7,6 +7,9 @@ dependencies = [
     "poke-env==0.15.0",
 ]
 
+[project.scripts]
+pvgc = "pvgc.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 

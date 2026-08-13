@@ -33,6 +33,9 @@ class MatchupResult:
     losses: int
     failed: int = 0
     brings: list[tuple[int, ...]] = field(default_factory=list)
+    # Per-battle rows for the store. Plain tuples, not sim types, so nothing
+    # from the engine layer crosses the seam.
+    battles: list[tuple] = field(default_factory=list)  # (winner, turns, bring_a, bring_b)
 
     def __post_init__(self):
         if self.wins + self.losses != self.n:
@@ -127,10 +130,15 @@ async def score_team(
         losses = sum(1 for o in outcomes if o.winner == "b")
         failed = sum(1 for o in outcomes if o.failed)
         brings = [o.bring_a for o in outcomes if o.bring_a is not None]
+        battles = [
+            (o.winner, o.turns, o.bring_a, o.bring_b)
+            for o in outcomes
+            if not o.failed
+        ]
         matchups.append(
             MatchupResult(
                 opponent_id=idx, n=wins + losses, wins=wins, losses=losses,
-                failed=failed, brings=brings,
+                failed=failed, brings=brings, battles=battles,
             )
         )
     return GauntletResult(
