@@ -90,3 +90,72 @@ def test_gauntlet_empty_holdout_is_zero_not_error():
     result = GauntletResult(candidate_hash="x", matchups=matchups, holdout_ids=set())
     assert result.holdout_winrate == 0.0
     assert result.holdout == []
+
+
+# --- seam wiring --------------------------------------------------------
+
+
+def test_score_team_excludes_failed_battles(monkeypatch):
+    """A battle that did not happen must never enter the denominator."""
+    import asyncio
+
+    from pvgc import score as score_mod
+    from pvgc.sim import BattleOutcome
+    from pvgc.team import Mon, Team
+
+    def _team(tag):
+        return Team(mons=[
+            Mon(species=f"{tag}{i}", item=f"I{tag}{i}", ability="A",
+                nature="Jolly", evs={}, moves=["Tackle"])
+            for i in range(6)
+        ])
+
+    async def fake_run_battles(team_a, team_b, n, tag="pvgc"):
+        return [
+            BattleOutcome("a", 5, (0, 1, 2, 3), (0, 1, 2, 3)),
+            BattleOutcome("b", 5, (0, 1, 2, 3), (0, 1, 2, 3)),
+            BattleOutcome(None, None, None, None, failed=True),
+        ]
+
+    monkeypatch.setattr(score_mod, "run_battles", fake_run_battles)
+
+    result = asyncio.run(
+        score_mod.score_team(_team("c"), [_team("g")], holdout_ids=set(), n=3)
+    )
+    m = result.matchups[0]
+    assert m.n == 2, "failed battle must not enter the denominator"
+    assert m.wins == 1 and m.losses == 1
+    assert m.failed == 1
+    assert result.total_failed == 1
+
+
+def test_score_team_collects_brings_and_holdout(monkeypatch):
+    import asyncio
+
+    from pvgc import score as score_mod
+    from pvgc.sim import BattleOutcome
+    from pvgc.team import Mon, Team
+
+    def _team(tag):
+        return Team(mons=[
+            Mon(species=f"{tag}{i}", item=f"I{tag}{i}", ability="A",
+                nature="Jolly", evs={}, moves=["Tackle"])
+            for i in range(6)
+        ])
+
+    async def fake_run_battles(team_a, team_b, n, tag="pvgc"):
+        winner = "a" if "g0" in tag else "b"
+        return [BattleOutcome(winner, 5, (0, 1, 2, 3), (0, 1, 2, 4))] * 4
+
+    monkeypatch.setattr(score_mod, "run_battles", fake_run_battles)
+
+    result = asyncio.run(
+        score_mod.score_team(
+            _team("c"), [_team("g"), _team("h")], holdout_ids={1}, n=4
+        )
+    )
+    assert len(result.matchups) == 2
+    assert result.train_winrate == 1.0
+    assert result.holdout_winrate == 0.0
+    assert result.overfit_gap == 1.0
+    assert result.matchups[0].bring_distribution()[(0, 1, 2, 3)] == 4

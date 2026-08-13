@@ -102,3 +102,37 @@ class GauntletResult:
     @property
     def total_failed(self) -> int:
         return sum(m.failed for m in self.matchups)
+
+
+from pvgc.sim import run_battles  # noqa: E402
+from pvgc.team import Team  # noqa: E402
+
+
+async def score_team(
+    candidate: Team,
+    gauntlet: list[Team],
+    holdout_ids: set[int],
+    n: int,
+) -> GauntletResult:
+    """Score a candidate against the gauntlet.
+
+    `opponent_id` is the index into `gauntlet`. Failed battles never enter the
+    denominator: a battle that did not happen is not a battle, and counting a
+    crashed one as a loss corrupts every downstream number invisibly.
+    """
+    matchups: list[MatchupResult] = []
+    for idx, opponent in enumerate(gauntlet):
+        outcomes = await run_battles(candidate, opponent, n=n, tag=f"g{idx}")
+        wins = sum(1 for o in outcomes if o.winner == "a")
+        losses = sum(1 for o in outcomes if o.winner == "b")
+        failed = sum(1 for o in outcomes if o.failed)
+        brings = [o.bring_a for o in outcomes if o.bring_a is not None]
+        matchups.append(
+            MatchupResult(
+                opponent_id=idx, n=wins + losses, wins=wins, losses=losses,
+                failed=failed, brings=brings,
+            )
+        )
+    return GauntletResult(
+        candidate_hash=candidate.hash(), matchups=matchups, holdout_ids=holdout_ids
+    )
