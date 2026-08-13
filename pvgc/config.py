@@ -32,3 +32,15 @@ BRING_SIZE = 4
 LEVEL = 50  # rule table adjustLevel: 50
 MAX_STAT_POINTS_TOTAL = 66
 MAX_STAT_POINTS_PER_STAT = 32
+
+# --- LLM proposer (M5) -------------------------------------------------
+
+# Reg M-B post-dates every model's training cutoff, so the proposer is
+# grounded entirely in fetched data. See pvgc/context.py.
+LLM_MODEL = "claude-opus-5"
+LLM_EFFORT = "high"          # low | medium | high | xhigh | max
+LLM_MAX_TOKENS = 16000       # non-streaming; keeps us under SDK HTTP timeouts
+LLM_MAX_REPAIRS = 1          # one repair attempt, then discard
+
+TOP_SPECIES_IN_PROMPT = 40
+CANDIDATES_PER_ROUND = 4
