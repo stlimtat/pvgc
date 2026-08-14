@@ -10,6 +10,7 @@ from pathlib import Path
 
 from pvgc.config import (
     BATTLES_PER_MATCHUP,
+    CANDIDATES_PER_ROUND,
     GAUNTLET_SIZE,
     HOLDOUT_SIZE,
 )
@@ -128,6 +129,78 @@ def cmd_score(args) -> int:
     return 0
 
 
+def cmd_propose(args) -> int:
+    """Propose -> score -> feed back. The M5 loop."""
+    from pvgc.propose import propose
+
+    gauntlet, from_cache = _load_gauntlet(args.size)
+    holdout = _holdout_ids(args.size)
+    usage, _ = fetch()
+
+    store = Store()
+    gauntlet_hash = "".join(t.hash()[:4] for t in gauntlet)
+    run_id = store.start_run(
+        gauntlet_hash=gauntlet_hash, n_battles=args.n, from_cache=from_cache,
+        notes=f"propose x{args.rounds}",
+    )
+    total = args.rounds * args.k * args.size * args.n
+    print(f"run {run_id}: {args.rounds} rounds x {args.k} candidates, "
+          f"up to {total} battles", file=sys.stderr)
+
+    with ShowdownServer(port=args.port):
+        for rnd in range(args.rounds):
+            # The proposer sees scored candidates only. The holdout split
+            # stays out of its reach so the overfit gap means something.
+            prior = store.scored_candidates(run_id)
+            mode = args.mode if rnd == 0 else "mutate"
+            print(f"\n=== round {rnd + 1}/{args.rounds} ({mode}) ===",
+                  file=sys.stderr)
+
+            accepted, rejected = propose(usage, prior, mode=mode, k=args.k)
+            for _, errors in rejected:
+                print(f"  discarded: {errors[0]}", file=sys.stderr)
+
+            for team, proposal in accepted:
+                candidate_id = store.add_team(
+                    team, role="candidate", source="llm",
+                    meta={"hypothesis": proposal.hypothesis,
+                          "changed_from": proposal.changed_from,
+                          "round": rnd},
+                )
+                result = asyncio.run(
+                    score_team(team, gauntlet, holdout, n=args.n)
+                )
+                for m in result.matchups:
+                    opponent_id = store.add_team(
+                        gauntlet[m.opponent_id], role="gauntlet", source="usage"
+                    )
+                    matchup_id = store.add_matchup(
+                        run_id, candidate_id, opponent_id, n=m.n,
+                        wins=m.wins, losses=m.losses, failed=m.failed,
+                    )
+                    for winner, turns, bring_a, bring_b in m.battles:
+                        store.add_battle(
+                            matchup_id, seed=None, winner=winner, turns=turns,
+                            bring_a=list(bring_a or []),
+                            bring_b=list(bring_b or []),
+                        )
+                lo, hi = result.overall_interval
+                # flush: this runs for minutes, and progress on stderr would
+                # otherwise arrive out of order with buffered stdout.
+                print(f"  {result.candidate_hash}  "
+                      f"{result.overall_winrate:6.1%} [{lo:.1%}, {hi:.1%}]  "
+                      f"gap {result.overfit_gap:+.1%}  "
+                      f"| {proposal.hypothesis[:60]}", flush=True)
+
+    print(f"\n=== run {run_id} leaderboard ===")
+    print(f"{'team':>17}  {'overall':>8}  {'95% CI':>18}  {'n':>5}  hypothesis")
+    for r in store.scored_candidates(run_id):
+        print(f"{r['hash']:>17}  {r['overall']:7.1%}  "
+              f"[{r['lo']:6.1%},{r['hi']:6.1%}]  {r['n']:5d}  "
+              f"{r['hypothesis'][:60]}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="pvgc")
     parser.add_argument("--size", type=int, default=GAUNTLET_SIZE,
@@ -144,8 +217,20 @@ def main() -> int:
     p_score.add_argument("--no-server", action="store_true",
                          help="assume a Showdown server is already running")
 
+    p_prop = sub.add_parser("propose", help="run the LLM search loop")
+    p_prop.add_argument("--rounds", type=int, default=3)
+    p_prop.add_argument("-k", type=int, default=CANDIDATES_PER_ROUND,
+                        help=f"candidates per round (default {CANDIDATES_PER_ROUND})")
+    p_prop.add_argument("-n", type=int, default=BATTLES_PER_MATCHUP)
+    p_prop.add_argument("--mode", choices=["seed", "probe"], default="seed")
+    p_prop.add_argument("--port", type=int, default=8000)
+
     args = parser.parse_args()
-    return {"gauntlet": cmd_gauntlet, "score": cmd_score}[args.cmd](args)
+    return {
+        "gauntlet": cmd_gauntlet,
+        "score": cmd_score,
+        "propose": cmd_propose,
+    }[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,25 @@ whenever you update the checkout.
 `score` starts and stops its own Showdown server. If you already have one
 running, pass `--no-server`.
 
+### Search loop
+
+    export ANTHROPIC_API_KEY=...
+    .venv/bin/pvgc propose --rounds 5 -k 4
+
+An LLM proposes teams, the gauntlet scores them, results feed the next round.
+Each team carries a falsifiable hypothesis, stored beside its result — the
+point is testing strategic ideas, not just ranking teams.
+
+**The model does not know this format.** Reg M-B post-dates every training
+cutoff and several of its Megas exist in no mainline game, so every fact in
+the prompt is read from `data/champions_dex.json` and the Smogon statistics.
+Nothing is recalled. Illegal teams are rejected by the same validator the
+`score` command uses, with one repair attempt before being discarded.
+
+Budget roughly `rounds x k x gauntlet_size x n` battles. The first round is
+`seed` (or `probe` with `--mode probe`); later rounds mutate the best team so
+far.
+
 ## Reading the numbers
 
 **Individual matchup cells are noisy; the overall figure is not.** At the
@@ -96,6 +115,14 @@ below that line only.
   and the top ~30 species are oversampled.
 - **Reg M-B ends 2026-09-09.** Retargeting is a change to `pvgc/config.py` plus
   a fresh stats month.
+- **The search optimises against the heuristic agent.** A better team here
+  means a team that beats this gauntlet when played by `SimpleHeuristicsPlayer`.
+  Watch the overfit gap, and treat a strong holdout score as the real signal.
+- **Hypotheses are the model's, and the verdict is only as good as the fitness
+  function.** A confirmed hypothesis means the matchup table agreed — not that
+  the claim is true of the format.
+- **Claude is the only implemented LLM provider**, behind a one-function seam
+  (`propose._complete`). Adding Gemini means reimplementing that function.
 
 ## Testing
 

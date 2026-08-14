@@ -85,3 +85,49 @@ def test_run_records_stats_provenance(store):
 def test_team_paste_roundtrip(store, team):
     tid = store.add_team(team, role="candidate", source="test")
     assert Team.from_paste(store.team_paste(tid)) == team
+
+
+def test_scored_candidates_returns_ranked_rows(store, team):
+    tid = store.add_team(team, role="candidate", source="llm",
+                         meta={"hypothesis": "Sand beats rain"})
+    oid = store.add_team(_team("g"), role="gauntlet", source="usage")
+    run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
+    store.add_matchup(run_id, tid, oid, n=10, wins=7, losses=3)
+
+    rows = store.scored_candidates(run_id)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["hash"] == team.hash()
+    assert row["n"] == 10
+    assert row["overall"] == pytest.approx(0.7)
+    assert row["lo"] < 0.7 < row["hi"]
+    assert row["hypothesis"] == "Sand beats rain"
+
+
+def test_scored_candidates_ranks_by_winrate(store):
+    a, b = _team("a"), _team("b")
+    aid = store.add_team(a, role="candidate", source="llm")
+    bid = store.add_team(b, role="candidate", source="llm")
+    oid = store.add_team(_team("g"), role="gauntlet", source="usage")
+    run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
+    store.add_matchup(run_id, aid, oid, n=10, wins=2, losses=8)
+    store.add_matchup(run_id, bid, oid, n=10, wins=9, losses=1)
+
+    rows = store.scored_candidates(run_id)
+    assert [r["hash"] for r in rows] == [b.hash(), a.hash()]
+
+
+def test_scored_candidates_pools_across_matchups(store, team):
+    """Overall must pool battles, matching GauntletResult.overall_winrate."""
+    tid = store.add_team(team, role="candidate", source="llm")
+    o1 = store.add_team(_team("g"), role="gauntlet", source="usage")
+    o2 = store.add_team(_team("h"), role="gauntlet", source="usage")
+    run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
+    store.add_matchup(run_id, tid, o1, n=10, wins=10, losses=0)
+    store.add_matchup(run_id, tid, o2, n=90, wins=0, losses=90)
+    assert store.scored_candidates(run_id)[0]["overall"] == pytest.approx(0.1)
+
+
+def test_scored_candidates_empty_run(store):
+    run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
+    assert store.scored_candidates(run_id) == []

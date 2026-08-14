@@ -141,6 +141,44 @@ class Store:
             "SELECT * FROM run WHERE id = ?", (run_id,)
         ).fetchone())
 
+    def scored_candidates(self, run_id: int, limit: int = 20) -> list[dict]:
+        """Candidates scored in this run, best first, with Wilson intervals.
+
+        Rates are pooled across matchups rather than averaged, matching
+        GauntletResult.overall_winrate.
+        """
+        from pvgc.score import wilson_interval
+
+        rows = self.conn.execute(
+            "SELECT t.hash AS hash, t.paste AS paste, t.meta_json AS meta_json,"
+            "       SUM(m.n) AS n, SUM(m.wins) AS wins"
+            "  FROM matchup m JOIN team t ON t.id = m.candidate_id"
+            " WHERE m.run_id = ? GROUP BY t.id",
+            (run_id,),
+        ).fetchall()
+
+        out = []
+        for r in rows:
+            n, wins = r["n"] or 0, r["wins"] or 0
+            lo, hi = wilson_interval(wins, n)
+            meta = json.loads(r["meta_json"])
+            rate = wins / n if n else 0.0
+            out.append({
+                "hash": r["hash"],
+                "paste": r["paste"],
+                "n": n,
+                "overall": rate,
+                "lo": lo,
+                "hi": hi,
+                # The holdout split lives in the CLI, which knows the gauntlet
+                # ordering; the store only sees pooled matchups.
+                "train": rate,
+                "holdout": 0.0,
+                "hypothesis": meta.get("hypothesis", ""),
+            })
+        out.sort(key=lambda d: -d["overall"])
+        return out[:limit]
+
     def team_paste(self, team_id: int) -> str:
         return self.conn.execute(
             "SELECT paste FROM team WHERE id = ?", (team_id,)
