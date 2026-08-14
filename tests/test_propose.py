@@ -176,3 +176,38 @@ def test_propose_stops_early_when_all_legal(monkeypatch, usage):
     assert len(accepted) == 1
     assert rejected == []
     assert len(calls) == 1, "no repair call should be made"
+
+
+# --- live smoke test ----------------------------------------------------
+
+
+@pytest.mark.slow
+def test_live_proposal_returns_legal_teams():
+    """One real API call. Costs a few cents; needs ANTHROPIC_API_KEY.
+
+    This is the moment the grounding design meets an actual model. Read the
+    rejection reasons on failure — they say which part of the prompt is not
+    landing (stat points, item pool, species pool).
+    """
+    import os
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    from pvgc.propose import propose
+    from pvgc.usage import fetch
+
+    real_usage, _ = fetch()
+    accepted, rejected = propose(real_usage, prior_rows=[], mode="seed", k=2)
+
+    print(f"\naccepted={len(accepted)} rejected={len(rejected)}")
+    for _, proposal in accepted:
+        print("HYPOTHESIS:", proposal.hypothesis)
+    for proposal, errors in rejected:
+        print("REJECTED:", errors[:3])
+
+    assert accepted, f"no legal teams; errors: {[e for _, e in rejected]}"
+    for team, proposal in accepted:
+        assert team.validate() == []
+        assert len(team.mons) == 6
+        assert proposal.hypothesis.strip()
