@@ -65,13 +65,27 @@ def test_prior_results_empty_is_explicit():
 def test_prior_results_include_intervals():
     rows = [
         {"hash": "abc123", "paste": "Garchomp @ Life Orb\n",
-         "overall": 0.58, "lo": 0.44, "hi": 0.71, "train": 0.66,
-         "holdout": 0.50, "n": 800, "hypothesis": "Sand core beats rain"},
+         "overall": 0.58, "lo": 0.44, "hi": 0.71, "n": 800,
+         "hypothesis": "Sand core beats rain"},
     ]
     text = format_prior_results(rows)
     assert "58" in text
     assert "44" in text and "71" in text
     assert "Sand core beats rain" in text
+
+
+def test_prior_results_never_show_holdout():
+    """A holdout column would both leak the split and, when the store has no
+    value for it, assert a fabricated 0.0% as fact."""
+    rows = [
+        {"hash": "abc123", "paste": "", "overall": 0.58, "lo": 0.44,
+         "hi": 0.71, "n": 800, "hypothesis": "h"},
+    ]
+    text = format_prior_results(rows)
+    assert "holdout" not in text.lower().split("held-out")[0].replace(
+        "held out", ""
+    ) or "| holdout |" not in text
+    assert "0.0%" not in text
 
 
 def test_stable_prompt_has_no_volatile_content(usage):

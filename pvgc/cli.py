@@ -143,15 +143,24 @@ def cmd_propose(args) -> int:
         gauntlet_hash=gauntlet_hash, n_battles=args.n, from_cache=from_cache,
         notes=f"propose x{args.rounds}",
     )
+    # Register the gauntlet up front so holdout opponents can be excluded from
+    # the proposer's feedback by team id.
+    opponent_ids = [
+        store.add_team(t, role="gauntlet", source="usage") for t in gauntlet
+    ]
+    holdout_team_ids = {opponent_ids[i] for i in holdout}
+
     total = args.rounds * args.k * args.size * args.n
     print(f"run {run_id}: {args.rounds} rounds x {args.k} candidates, "
           f"up to {total} battles", file=sys.stderr)
 
     with ShowdownServer(port=args.port):
         for rnd in range(args.rounds):
-            # The proposer sees scored candidates only. The holdout split
-            # stays out of its reach so the overfit gap means something.
-            prior = store.scored_candidates(run_id)
+            # Train split only. Holdout opponents are excluded outright so
+            # the overfit gap stays an honest out-of-sample measure.
+            prior = store.scored_candidates(
+                run_id, holdout_team_ids=holdout_team_ids
+            )
             mode = args.mode if rnd == 0 else "mutate"
             print(f"\n=== round {rnd + 1}/{args.rounds} ({mode}) ===",
                   file=sys.stderr)
