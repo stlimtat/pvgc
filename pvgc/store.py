@@ -141,40 +141,52 @@ class Store:
             "SELECT * FROM run WHERE id = ?", (run_id,)
         ).fetchone())
 
-    def scored_candidates(self, run_id: int, limit: int = 20) -> list[dict]:
+    def scored_candidates(
+        self,
+        run_id: int,
+        holdout_team_ids: set[int] | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
         """Candidates scored in this run, best first, with Wilson intervals.
 
         Rates are pooled across matchups rather than averaged, matching
         GauntletResult.overall_winrate.
+
+        `holdout_team_ids` excludes those opponents entirely. This feeds the
+        LLM proposer, which must see train results only — a holdout matchup
+        leaking into its feedback defeats the point of the split. Holdout
+        rates are deliberately not returned at all: a placeholder value here
+        becomes an asserted fact in the prompt.
         """
         from pvgc.score import wilson_interval
 
-        rows = self.conn.execute(
+        sql = (
             "SELECT t.hash AS hash, t.paste AS paste, t.meta_json AS meta_json,"
             "       SUM(m.n) AS n, SUM(m.wins) AS wins"
             "  FROM matchup m JOIN team t ON t.id = m.candidate_id"
-            " WHERE m.run_id = ? GROUP BY t.id",
-            (run_id,),
-        ).fetchall()
+            " WHERE m.run_id = ?"
+        )
+        params: list = [run_id]
+        if holdout_team_ids:
+            placeholders = ",".join("?" * len(holdout_team_ids))
+            sql += f" AND m.opponent_id NOT IN ({placeholders})"
+            params.extend(sorted(holdout_team_ids))
+        sql += " GROUP BY t.id"
 
         out = []
-        for r in rows:
+        for r in self.conn.execute(sql, params).fetchall():
             n, wins = r["n"] or 0, r["wins"] or 0
+            if not n:
+                continue
             lo, hi = wilson_interval(wins, n)
-            meta = json.loads(r["meta_json"])
-            rate = wins / n if n else 0.0
             out.append({
                 "hash": r["hash"],
                 "paste": r["paste"],
                 "n": n,
-                "overall": rate,
+                "overall": wins / n,
                 "lo": lo,
                 "hi": hi,
-                # The holdout split lives in the CLI, which knows the gauntlet
-                # ordering; the store only sees pooled matchups.
-                "train": rate,
-                "holdout": 0.0,
-                "hypothesis": meta.get("hypothesis", ""),
+                "hypothesis": json.loads(r["meta_json"]).get("hypothesis", ""),
             })
         out.sort(key=lambda d: -d["overall"])
         return out[:limit]

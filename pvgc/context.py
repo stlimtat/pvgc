@@ -107,21 +107,28 @@ def format_usage_priors(usage: Usage, n: int = TOP_SPECIES_IN_PROMPT) -> str:
 
 
 def format_prior_results(rows: list[dict]) -> str:
-    """Scored candidates from this run. Every rate carries its interval —
-    a bare percentage invites confident narration of noise."""
+    """Scored candidates from this run, train split only.
+
+    Every rate carries its interval — a bare percentage invites confident
+    narration of noise. Holdout rates are deliberately absent: the proposer
+    must not see them, and a placeholder would read as an asserted fact.
+    """
     if not rows:
         return "# Prior results\n\nNo prior results yet — this is the first round.\n"
     lines = [
-        "# Prior results (train split only)",
+        "# Prior results",
         "",
-        "| team | overall | 95% CI | train | holdout | n | hypothesis |",
-        "|---|---|---|---|---|---|---|",
+        "Win rates against the training half of the opponent pool. A separate "
+        "held-out half is scored but not shown to you.",
+        "",
+        "| team | win rate | 95% CI | battles | hypothesis |",
+        "|---|---|---|---|---|",
     ]
     for r in rows:
         lines.append(
             f"| {r['hash']} | {r['overall']:.1%} | "
-            f"[{r['lo']:.1%}, {r['hi']:.1%}] | {r['train']:.1%} | "
-            f"{r['holdout']:.1%} | {r['n']} | {r.get('hypothesis', '') or '-'} |"
+            f"[{r['lo']:.1%}, {r['hi']:.1%}] | {r['n']} | "
+            f"{r.get('hypothesis', '') or '-'} |"
         )
     lines.append("")
     lines.append(

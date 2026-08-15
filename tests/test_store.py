@@ -131,3 +131,41 @@ def test_scored_candidates_pools_across_matchups(store, team):
 def test_scored_candidates_empty_run(store):
     run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
     assert store.scored_candidates(run_id) == []
+
+
+def test_scored_candidates_excludes_holdout_opponents(store, team):
+    """The proposer must see train results only — a holdout matchup leaking
+    into its feedback defeats the point of the split."""
+    tid = store.add_team(team, role="candidate", source="llm")
+    train_op = store.add_team(_team("g"), role="gauntlet", source="usage")
+    hold_op = store.add_team(_team("h"), role="gauntlet", source="usage")
+    run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
+    store.add_matchup(run_id, tid, train_op, n=10, wins=8, losses=2)
+    store.add_matchup(run_id, tid, hold_op, n=10, wins=0, losses=10)
+
+    both = store.scored_candidates(run_id)[0]
+    assert both["overall"] == pytest.approx(0.4)
+
+    train_only = store.scored_candidates(run_id, holdout_team_ids={hold_op})[0]
+    assert train_only["overall"] == pytest.approx(0.8)
+    assert train_only["n"] == 10
+
+
+def test_scored_candidates_drops_candidates_with_only_holdout_matchups(store, team):
+    tid = store.add_team(team, role="candidate", source="llm")
+    hold_op = store.add_team(_team("h"), role="gauntlet", source="usage")
+    run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
+    store.add_matchup(run_id, tid, hold_op, n=10, wins=5, losses=5)
+    assert store.scored_candidates(run_id, holdout_team_ids={hold_op}) == []
+
+
+def test_scored_candidates_reports_no_fabricated_holdout(store, team):
+    """holdout must not be reported at all — a 0.0 placeholder ends up in
+    the prompt as a fact."""
+    tid = store.add_team(team, role="candidate", source="llm")
+    oid = store.add_team(_team("g"), role="gauntlet", source="usage")
+    run_id = store.start_run(gauntlet_hash="abc", n_battles=10, from_cache=True)
+    store.add_matchup(run_id, tid, oid, n=10, wins=7, losses=3)
+    row = store.scored_candidates(run_id)[0]
+    assert "holdout" not in row
+    assert "train" not in row
